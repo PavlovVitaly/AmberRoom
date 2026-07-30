@@ -14,7 +14,22 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-# Linking deps
+# Find Boehm GC
+find_package(GC QUIET)
+if(NOT GC_FOUND)
+    find_package(PkgConfig QUIET)
+    if(PkgConfig_FOUND)
+        pkg_check_modules(GC IMPORTED_TARGET bdw-gc)
+        if(GC_FOUND)
+            add_library(GC::GC ALIAS PkgConfig::GC)
+        endif()
+    endif()
+endif()
+if(NOT GC_FOUND)
+    message(FATAL_ERROR "Boehm GC not found. Install libgc or provide it via Conan.")
+endif()
+
+# Find GTest
 find_package(GTest REQUIRED)
 
 # target lib
@@ -31,6 +46,7 @@ target_include_directories(amber_room_lib
         ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
+target_link_libraries(amber_room_lib PUBLIC GC::GC)
 target_compile_features(amber_room_lib PRIVATE cxx_std_23)
 
 # target tests
