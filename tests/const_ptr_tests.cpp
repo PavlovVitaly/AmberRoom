@@ -61,8 +61,10 @@ public:
 
 TEST(ConstPtrTest, SimpleConstructTest) {
     MockStruct::cleanCnts();
-    auto ptr = make_const_ptr<MockStruct>(42);
-    EXPECT_EQ(ptr->getField(), 42);
+    {
+        auto ptr = make_const_ptr<MockStruct>(42);
+        EXPECT_EQ(ptr->getField(), 42);
+    }
     EXPECT_EQ(MockStruct::creating_cnt, 1);
     EXPECT_EQ(MockStruct::copy_creating_cnt, 0);
     EXPECT_EQ(MockStruct::move_creating_cnt, 0);
@@ -71,7 +73,7 @@ TEST(ConstPtrTest, SimpleConstructTest) {
     EXPECT_EQ(MockStruct::destructed_cnt, 0);
 }
 
-TEST(ConstPtrTest, SimpleCopyConstructtructTest) {
+TEST(ConstPtrTest, SimpleCopyConstructTest) {
     MockStruct::cleanCnts();
     auto ptr = make_const_ptr<MockStruct>(42);
     auto copyPtr = clone_const_ptr(ptr);
@@ -82,4 +84,41 @@ TEST(ConstPtrTest, SimpleCopyConstructtructTest) {
     EXPECT_EQ(MockStruct::copy_assignment_cnt, 0);
     EXPECT_EQ(MockStruct::move_assignment_cnt, 0);
     EXPECT_EQ(MockStruct::destructed_cnt, 0);
+}
+
+TEST(ConstPtrTest, SimpleAssignConstructTest) {
+    MockStruct::cleanCnts();
+    auto ptr = make_const_ptr<MockStruct>(42);
+    auto copyPtr = ptr;
+    EXPECT_EQ(copyPtr->getField(), 42);
+    EXPECT_EQ(MockStruct::creating_cnt, 1);
+    EXPECT_EQ(MockStruct::copy_creating_cnt, 0);
+    EXPECT_EQ(MockStruct::move_creating_cnt, 0);
+    EXPECT_EQ(MockStruct::copy_assignment_cnt, 0);
+    EXPECT_EQ(MockStruct::move_assignment_cnt, 0);
+    EXPECT_EQ(MockStruct::destructed_cnt, 0);
+}
+
+
+class Base {
+public:
+    virtual ~Base() = default; // Необходим для dynamic_cast
+};
+
+class Derived : public Base {
+public:
+    void foo() const {}
+};
+
+TEST(ConstPtrTest, SimpleUpcastingTest) {
+    AmberRoom::ConstPtr<Derived> derivedPtr = AmberRoom::make_const_ptr<Derived>();
+
+    // 1. Auto Upcasting
+    AmberRoom::ConstPtr<Base> basePtr = derivedPtr; 
+
+    AmberRoom::ConstPtr<Derived> staticDerived = AmberRoom::static_pointer_cast<Derived>(basePtr);
+
+    if (auto dynamicDerived = AmberRoom::dynamic_pointer_cast<Derived>(basePtr)) {
+        dynamicDerived->foo();
+    }
 }

@@ -39,6 +39,7 @@ target_sources(amber_room_lib
     PUBLIC FILE_SET CXX_MODULES BASE_DIRS src
         FILES
             src/const_ptr/const_ptr.cppm
+            src/memory/scoped_gc_redirection.cppm
 )
 
 target_include_directories(amber_room_lib
