@@ -1,13 +1,14 @@
 #include <gtest/gtest.h>
+#include <gc/gc.h>
 
-import const_ptr;
+import immutable_ptr;
 
-using AmberRoom::ConstPtr;
-using AmberRoom::make_const_ptr;
-using AmberRoom::clone_const_ptr;
+using AmberRoom::ImmutablePtr;
+using AmberRoom::make_immutable_ptr;
+using AmberRoom::clone_immutable_ptr;
 
 class MockStruct{
-    int field_;
+    int field_{100};
 
 public:
     static inline size_t creating_cnt{};
@@ -24,6 +25,10 @@ public:
         copy_assignment_cnt = 0;
         move_assignment_cnt = 0;
         destructed_cnt = 0;
+    }
+
+    MockStruct(){
+        ++creating_cnt;
     }
 
     MockStruct(int field): field_(field){
@@ -59,12 +64,21 @@ public:
     }
 };
 
-TEST(ConstPtrTest, SimpleConstructTest) {
+TEST(ImmutablePtrTest, SimpleConstructTest) { 
+    GC_INIT();
     MockStruct::cleanCnts();
     {
-        auto ptr = make_const_ptr<MockStruct>(42);
-        EXPECT_EQ(ptr->getField(), 42);
+        auto ptr = make_immutable_ptr<MockStruct>(12345);
+        EXPECT_EQ(ptr->getField(), 12345);
     }
+    
+    
+    for (int i = 0; i < 50; ++i) {
+        GC_clear_roots(); 
+        GC_gcollect();
+        GC_invoke_finalizers();
+    }
+    
     EXPECT_EQ(MockStruct::creating_cnt, 1);
     EXPECT_EQ(MockStruct::copy_creating_cnt, 0);
     EXPECT_EQ(MockStruct::move_creating_cnt, 0);
@@ -73,10 +87,10 @@ TEST(ConstPtrTest, SimpleConstructTest) {
     EXPECT_EQ(MockStruct::destructed_cnt, 0);
 }
 
-TEST(ConstPtrTest, SimpleCopyConstructTest) {
+TEST(ImmutablePtrTest, SimpleCopyConstructTest) {
     MockStruct::cleanCnts();
-    auto ptr = make_const_ptr<MockStruct>(42);
-    auto copyPtr = clone_const_ptr(ptr);
+    auto ptr = make_immutable_ptr<MockStruct>(42);
+    auto copyPtr = clone_immutable_ptr(ptr);
     EXPECT_EQ(copyPtr->getField(), 42);
     EXPECT_EQ(MockStruct::creating_cnt, 1);
     EXPECT_EQ(MockStruct::copy_creating_cnt, 1);
@@ -86,9 +100,9 @@ TEST(ConstPtrTest, SimpleCopyConstructTest) {
     EXPECT_EQ(MockStruct::destructed_cnt, 0);
 }
 
-TEST(ConstPtrTest, SimpleAssignConstructTest) {
+TEST(ImmutablePtrTest, SimpleAssignConstructTest) {
     MockStruct::cleanCnts();
-    auto ptr = make_const_ptr<MockStruct>(42);
+    auto ptr = make_immutable_ptr<MockStruct>(42);
     auto copyPtr = ptr;
     EXPECT_EQ(copyPtr->getField(), 42);
     EXPECT_EQ(MockStruct::creating_cnt, 1);
@@ -110,13 +124,13 @@ public:
     void foo() const {}
 };
 
-TEST(ConstPtrTest, SimpleUpcastingTest) {
-    AmberRoom::ConstPtr<Derived> derivedPtr = AmberRoom::make_const_ptr<Derived>();
+TEST(ImmutablePtrTest, SimpleUpcastingTest) {
+    AmberRoom::ImmutablePtr<Derived> derivedPtr = AmberRoom::make_immutable_ptr<Derived>();
 
-    // 1. Auto Upcasting
-    AmberRoom::ConstPtr<Base> basePtr = derivedPtr; 
+    // Auto Upcasting
+    AmberRoom::ImmutablePtr<Base> basePtr = derivedPtr; 
 
-    AmberRoom::ConstPtr<Derived> staticDerived = AmberRoom::static_pointer_cast<Derived>(basePtr);
+    AmberRoom::ImmutablePtr<Derived> staticDerived = AmberRoom::static_pointer_cast<Derived>(basePtr);
 
     if (auto dynamicDerived = AmberRoom::dynamic_pointer_cast<Derived>(basePtr)) {
         dynamicDerived->foo();

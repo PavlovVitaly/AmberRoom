@@ -38,7 +38,7 @@ add_library(amber_room_lib)
 target_sources(amber_room_lib
     PUBLIC FILE_SET CXX_MODULES BASE_DIRS src
         FILES
-            src/const_ptr/const_ptr.cppm
+            src/immutable_ptr/immutable_ptr.cppm
             src/memory/scoped_gc_redirection.cppm
 )
 
@@ -52,7 +52,7 @@ target_compile_features(amber_room_lib PRIVATE cxx_std_23)
 
 # target tests
 add_executable(utests
-    tests/const_ptr_tests.cpp
+    tests/immutable_ptr_tests.cpp
 )
 
 target_link_libraries(utests
