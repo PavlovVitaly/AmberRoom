@@ -17,7 +17,6 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 option(AMBER_ROOM_MULTITHREADED "Enable multithreading support and thread-safe GC" ON)
 
 if(AMBER_ROOM_MULTITHREADED)
-    # Find Threads (необходимо только для многопоточного Boehm GC)
     find_package(Threads REQUIRED)
 endif()
 
@@ -47,6 +46,8 @@ target_sources(amber_room_lib
         FILES
             src/immutable_ptr/immutable_ptr.cppm
             src/memory/scoped_gc_redirection.cppm
+            src/memory/gc_allocators.cppm
+            src/std_aliases/std_aliases.cppm
 )
 
 target_include_directories(amber_room_lib
@@ -86,3 +87,18 @@ endif()
 enable_testing()
 include(GoogleTest)
 gtest_discover_tests(utests)
+
+find_package(benchmark REQUIRED)
+find_package(immer REQUIRED)
+
+add_executable(bench_tests
+    benchmarks/immutable_ptr_bench.cpp
+)
+
+target_link_libraries(bench_tests
+    PRIVATE
+        amber_room_lib
+        benchmark::benchmark
+        #benchmark::benchmark_main # creating main() for benchmarks
+        immer::immer 
+)

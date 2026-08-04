@@ -4,9 +4,8 @@
 import immutable_ptr;
 
 using AmberRoom::ImmutablePtr;
-using AmberRoom::make_immutable_ptr;
+using AmberRoom::make_flat_immutable_ptr;
 using AmberRoom::clone_immutable_ptr;
-using AmberRoom::mutate;
 
 class MockStruct{
     int field_{100};
@@ -68,7 +67,7 @@ public:
 TEST(ImmutablePtrTest, SimpleConstructTest) {
     MockStruct::cleanCnts();
     {
-        auto ptr = make_immutable_ptr<MockStruct>(12345);
+        auto ptr = make_flat_immutable_ptr<MockStruct>(12345);
         EXPECT_EQ(ptr->getField(), 12345);
     }
     EXPECT_EQ(MockStruct::creating_cnt, 1);
@@ -80,13 +79,13 @@ TEST(ImmutablePtrTest, SimpleConstructTest) {
 }
 
 TEST(ImmutablePtrTest, PrimitiveTypeTest) {
-    auto ptr = make_immutable_ptr<int>(12345);
+    auto ptr = make_flat_immutable_ptr<int>(12345);
     EXPECT_EQ(*ptr, 12345);
 }
 
 TEST(ImmutablePtrTest, SimpleCopyConstructTest) {
     MockStruct::cleanCnts();
-    auto ptr = make_immutable_ptr<MockStruct>(42);
+    auto ptr = make_flat_immutable_ptr<MockStruct>(42);
     auto copyPtr = clone_immutable_ptr(ptr);
     EXPECT_EQ(copyPtr->getField(), 42);
     EXPECT_EQ(MockStruct::creating_cnt, 1);
@@ -99,7 +98,7 @@ TEST(ImmutablePtrTest, SimpleCopyConstructTest) {
 
 TEST(ImmutablePtrTest, SimpleAssignConstructTest) {
     MockStruct::cleanCnts();
-    auto ptr = make_immutable_ptr<MockStruct>(42);
+    auto ptr = make_flat_immutable_ptr<MockStruct>(42);
     auto copyPtr = ptr;
     EXPECT_EQ(copyPtr->getField(), 42);
     EXPECT_EQ(MockStruct::creating_cnt, 1);
@@ -122,7 +121,7 @@ public:
 };
 
 TEST(ImmutablePtrTest, SimpleUpcastingTest) {
-    ImmutablePtr<Derived> derivedPtr = make_immutable_ptr<Derived>();
+    ImmutablePtr<Derived> derivedPtr = make_flat_immutable_ptr<Derived>();
 
     // Auto Upcasting
     ImmutablePtr<Base> basePtr = derivedPtr; 
@@ -151,15 +150,15 @@ public:
     }
 };
 
-TEST(ImmutablePtrTest, MutateWithNRVOTest) {
+TEST(ImmutablePtrTest, MutateTest) {
     TestPlayer::copy_cnt = 0;
     TestPlayer::move_cnt = 0;
 
-    auto player1 = make_immutable_ptr<TestPlayer>("Paladin", 100);
+    auto player1 = make_flat_immutable_ptr<TestPlayer>("Paladin", 100);
     
     EXPECT_EQ(TestPlayer::copy_cnt, 0);
 
-    auto player2 = mutate(player1, [](const TestPlayer& old_player) {
+    auto player2 = player1.mutate([](const TestPlayer& old_player) {
         TestPlayer updated{ old_player.name, old_player.hp - 30 }; 
         return updated;
     });

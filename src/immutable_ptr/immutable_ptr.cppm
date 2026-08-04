@@ -26,9 +26,66 @@ template <typename F, typename U>
 concept Mutator = std::invocable<F, const U&> && 
                      std::convertible_to<std::invoke_result_t<F, const U&>, U>;
 
-export template<typename T>
+export struct FlatMode {};  
+export struct GraphMode {}; 
+
+export template<typename T, typename Mode = FlatMode>
 class ImmutablePtr{
 public:
+using mode_type = Mode;
+
+template<typename... Args>
+requires InitializableFrom<T, Args...>
+static ImmutablePtr<T, Mode> createInstance(Args&&... args) {
+    ScopedGCRedirection gcRedirection;
+    
+    void* mem = nullptr;
+    if(std::is_trivially_copyable_v<T> && !std::is_pointer_v<T>){
+        mem = GC_MALLOC_ATOMIC(sizeof(T));
+    } else {
+        mem = GC_MALLOC(sizeof(T));
+    }
+    
+    if (!mem) throw std::bad_alloc();
+    
+    // RAII-guard: if placement new failed then GC collect mem
+    auto cleanup = [](void* p) { GC_free(p); };
+    std::unique_ptr<void, decltype(cleanup)> guard(mem, cleanup);
+    
+    T* ptr = ::new(mem) T(std::forward<Args>(args)...);
+
+    // register finalizer
+    if constexpr (!std::is_trivially_destructible_v<T>) {
+        void* hidden_ptr = reinterpret_cast<void*>(GC_HIDE_POINTER(ptr));
+
+        if constexpr (std::same_as<Mode, FlatMode>) {
+            GC_REGISTER_FINALIZER_NO_ORDER(
+                mem, 
+                [](void* /*obj*/, void* data) {
+                    T* real_ptr = static_cast<T*>(GC_REVEAL_POINTER(data));
+                    real_ptr->~T();
+                }, 
+                hidden_ptr, 
+                nullptr, 
+                nullptr
+            );
+        } else {
+            GC_REGISTER_FINALIZER(
+                mem, 
+                [](void* /*obj*/, void* data) {
+                    T* real_ptr = static_cast<T*>(GC_REVEAL_POINTER(data));
+                    real_ptr->~T();
+                }, 
+                hidden_ptr, 
+                nullptr, 
+                nullptr
+            );
+        }
+    }
+
+    guard.release();
+    return ImmutablePtr<T, Mode>(ptr);
+}
 
 ImmutablePtr() : ptr_(nullptr) {};
 ImmutablePtr(std::nullptr_t) : ptr_(nullptr) {};
@@ -38,7 +95,7 @@ ImmutablePtr(ImmutablePtr&& other) = delete;
 // Auto upcasting (Derived* -> Base*)
 template<typename U>
 requires std::convertible_to<U*, T*>
-ImmutablePtr(const ImmutablePtr<U>& other) : ptr_(other.get()) {}
+ImmutablePtr(const ImmutablePtr<U, Mode>& other) : ptr_(other.get()) {}
 
 ImmutablePtr& operator = (const ImmutablePtr& other) = delete;
 ImmutablePtr& operator = (ImmutablePtr&& other) = delete;
@@ -56,12 +113,12 @@ bool operator == (const ImmutablePtr& other) const noexcept = default;
 auto operator <=> (const ImmutablePtr& other) const noexcept = default;
 
 template<typename U>
-bool operator == (const ImmutablePtr<U>& other) const noexcept {
+bool operator == (const ImmutablePtr<U, Mode>& other) const noexcept {
     return ptr_ == other.get();
 }
 
 template<typename U>
-auto operator <=> (const ImmutablePtr<U>& other) const noexcept {
+auto operator <=> (const ImmutablePtr<U, Mode>& other) const noexcept {
     return ptr_ <=> other.get();
 }
 
@@ -73,24 +130,21 @@ const T* get() const noexcept{
     return ptr_;
 };
 
+template<typename F>
+requires Mutator<F, T>
+auto mutate(F mutator) const{
+    return createInstance(mutator(*ptr_));
+}
+
 private:
 
-template<typename U, typename... Args>
-requires InitializableFrom<U, Args...>
-friend ImmutablePtr<U> make_immutable_ptr(Args&&... args);
-
-template<typename U, typename F>
-requires Mutator<F, U>
-friend ImmutablePtr<U> mutate(ImmutablePtr<U>& target, F mutator);
-
-template<typename U> friend class ImmutablePtr;
-template<typename To, typename From>
+template<typename To, typename From, typename M>
 requires requires(const From* f) { static_cast<const To*>(f); }
-friend ImmutablePtr<To> static_pointer_cast(const ImmutablePtr<From>& r) noexcept;
+friend auto static_pointer_cast(const ImmutablePtr<From, M>& r) noexcept;
 
-template<typename To, typename From>
+template<typename To, typename From, typename M>
 requires std::is_polymorphic_v<From>
-friend ImmutablePtr<To> dynamic_pointer_cast(const ImmutablePtr<From>& r) noexcept;
+friend auto dynamic_pointer_cast(const ImmutablePtr<From, M>& r) noexcept;
 
 
 ImmutablePtr(const T* ptr): ptr_(ptr){}
@@ -98,66 +152,44 @@ ImmutablePtr(const T* ptr): ptr_(ptr){}
 const T* const ptr_;
 };
 
+export template<typename U, typename Mode, typename... Args>
+requires InitializableFrom<U, Args...>
+auto make_immutable_ptr(Args&&... args) {
+    return ImmutablePtr<U, Mode>::createInstance(std::forward<Args>(args)...);
+}
+
 export template<typename U, typename... Args>
 requires InitializableFrom<U, Args...>
-ImmutablePtr<U> make_immutable_ptr(Args&&... args) {
-    ScopedGCRedirection gcRedirection;
-    
-    void* mem = GC_MALLOC(sizeof(U));
-    if (!mem) throw std::bad_alloc();
-    
-    // RAII-guard: if placement new failed then GC collect mem
-    auto cleanup = [](void* p) { GC_free(p); };
-    std::unique_ptr<void, decltype(cleanup)> guard(mem, cleanup);
-    
-    U* ptr = ::new (mem) U(std::forward<Args>(args)...);
-
-    // register finalizer
-    if constexpr (!std::is_trivially_destructible_v<U>) {
-        void* hidden_ptr = reinterpret_cast<void*>(GC_HIDE_POINTER(ptr));
-
-        GC_register_finalizer(
-            mem, 
-            [](void* /*obj*/, void* data) {
-                U* real_ptr = static_cast<U*>(GC_REVEAL_POINTER(data));
-                real_ptr->~U();
-            }, 
-            hidden_ptr, 
-            nullptr, 
-            nullptr
-        );
-    }
-
-    guard.release();
-    return ImmutablePtr<U>(ptr);
+auto make_flat_immutable_ptr(Args&&... args) {
+    return ImmutablePtr<U, FlatMode>::createInstance(std::forward<Args>(args)...);
 }
 
-export template<typename U>
+export template<typename U, typename... Args>
+requires InitializableFrom<U, Args...>
+auto make_graph_immutable_ptr(Args&&... args) {
+    return ImmutablePtr<U, GraphMode>::createInstance(std::forward<Args>(args)...);
+}
+
+export template<typename U, typename Mode>
 requires std::copy_constructible<U>
-ImmutablePtr<U> clone_immutable_ptr(const ImmutablePtr<U>& ptr) {
-    return make_immutable_ptr<U>(*ptr.get());
+auto clone_immutable_ptr(const ImmutablePtr<U, Mode>& ptr) {
+    return make_immutable_ptr<U, Mode>(*ptr.get());
 }
 
-export template<typename U, typename F>
-requires Mutator<F, U>
-ImmutablePtr<U> mutate(ImmutablePtr<U>& target, F mutator){
-    return make_immutable_ptr<U>(mutator(*target));
-}
-
-export template<typename To, typename From>
+export template<typename To, typename From, typename M>
 requires requires(const From* f) { static_cast<const To*>(f); }
-ImmutablePtr<To> static_pointer_cast(const ImmutablePtr<From>& r) noexcept {
+auto static_pointer_cast(const ImmutablePtr<From, M>& r) noexcept {
     auto p = static_cast<const To*>(r.get());
-    return ImmutablePtr<To>(p);
+    return ImmutablePtr<To, M>(p);
 }
 
-export template<typename To, typename From>
+export template<typename To, typename From, typename Mode>
 requires std::is_polymorphic_v<From>
-ImmutablePtr<To> dynamic_pointer_cast(const ImmutablePtr<From>& r) noexcept {
+auto dynamic_pointer_cast(const ImmutablePtr<From, Mode>& r) noexcept {
     if (auto p = dynamic_cast<const To*>(r.get())) {
-        return ImmutablePtr<To>(p);
+        return ImmutablePtr<To, Mode>(p);
     }
-    return ImmutablePtr<To>(nullptr);
+    return ImmutablePtr<To, Mode>(nullptr);
 }
 
 } //namespace AmberRoom
