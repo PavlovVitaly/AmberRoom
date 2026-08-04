@@ -18,7 +18,7 @@ export struct ScopedGCRedirection {
 
 export void* allocate_memory(std::size_t size) {
     if (g_use_gc_allocator) {
-        void* ptr = GC_malloc(size);
+        void* ptr = GC_MALLOC(size);
         if (!ptr) throw std::bad_alloc();
         return ptr;
     }

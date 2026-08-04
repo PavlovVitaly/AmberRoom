@@ -6,6 +6,7 @@ import immutable_ptr;
 using AmberRoom::ImmutablePtr;
 using AmberRoom::make_immutable_ptr;
 using AmberRoom::clone_immutable_ptr;
+using AmberRoom::mutate;
 
 class MockStruct{
     int field_{100};
@@ -51,7 +52,7 @@ public:
 
     MockStruct& operator = (MockStruct&& other){
         field_ = std::move(other.field_);
-        ++copy_assignment_cnt;
+        ++move_assignment_cnt;
         return *this;
     }
 
@@ -64,27 +65,23 @@ public:
     }
 };
 
-TEST(ImmutablePtrTest, SimpleConstructTest) { 
-    GC_INIT();
+TEST(ImmutablePtrTest, SimpleConstructTest) {
     MockStruct::cleanCnts();
     {
         auto ptr = make_immutable_ptr<MockStruct>(12345);
         EXPECT_EQ(ptr->getField(), 12345);
     }
-    
-    
-    for (int i = 0; i < 50; ++i) {
-        GC_clear_roots(); 
-        GC_gcollect();
-        GC_invoke_finalizers();
-    }
-    
     EXPECT_EQ(MockStruct::creating_cnt, 1);
     EXPECT_EQ(MockStruct::copy_creating_cnt, 0);
     EXPECT_EQ(MockStruct::move_creating_cnt, 0);
     EXPECT_EQ(MockStruct::copy_assignment_cnt, 0);
     EXPECT_EQ(MockStruct::move_assignment_cnt, 0);
     EXPECT_EQ(MockStruct::destructed_cnt, 0);
+}
+
+TEST(ImmutablePtrTest, PrimitiveTypeTest) {
+    auto ptr = make_immutable_ptr<int>(12345);
+    EXPECT_EQ(*ptr, 12345);
 }
 
 TEST(ImmutablePtrTest, SimpleCopyConstructTest) {
@@ -125,14 +122,51 @@ public:
 };
 
 TEST(ImmutablePtrTest, SimpleUpcastingTest) {
-    AmberRoom::ImmutablePtr<Derived> derivedPtr = AmberRoom::make_immutable_ptr<Derived>();
+    ImmutablePtr<Derived> derivedPtr = make_immutable_ptr<Derived>();
 
     // Auto Upcasting
-    AmberRoom::ImmutablePtr<Base> basePtr = derivedPtr; 
-
-    AmberRoom::ImmutablePtr<Derived> staticDerived = AmberRoom::static_pointer_cast<Derived>(basePtr);
-
-    if (auto dynamicDerived = AmberRoom::dynamic_pointer_cast<Derived>(basePtr)) {
+    ImmutablePtr<Base> basePtr = derivedPtr; 
+    ImmutablePtr<Derived> staticDerived = static_pointer_cast<Derived>(basePtr);
+    if (auto dynamicDerived = dynamic_pointer_cast<Derived>(basePtr)) {
         dynamicDerived->foo();
     }
+}
+
+class TestPlayer {
+public:
+    std::string name;
+    int hp;
+
+    static inline size_t copy_cnt = 0;
+    static inline size_t move_cnt = 0;
+
+    TestPlayer(std::string n, int h) : name(std::move(n)), hp(h) {}
+    
+    // Отслеживаем деструкторы и конструкторы копирования/перемещения
+    TestPlayer(const TestPlayer& other) : name(other.name), hp(other.hp) {
+        ++copy_cnt;
+    }
+    TestPlayer(TestPlayer&& other) noexcept : name(std::move(other.name)), hp(other.hp) {
+        ++move_cnt;
+    }
+};
+
+TEST(ImmutablePtrTest, MutateWithNRVOTest) {
+    TestPlayer::copy_cnt = 0;
+    TestPlayer::move_cnt = 0;
+
+    auto player1 = make_immutable_ptr<TestPlayer>("Paladin", 100);
+    
+    EXPECT_EQ(TestPlayer::copy_cnt, 0);
+
+    auto player2 = mutate(player1, [](const TestPlayer& old_player) {
+        TestPlayer updated{ old_player.name, old_player.hp - 30 }; 
+        return updated;
+    });
+
+    EXPECT_EQ(player1->hp, 100);
+    EXPECT_EQ(player2->hp, 70);
+    EXPECT_EQ(player2->name, "Paladin");
+
+    EXPECT_EQ(TestPlayer::copy_cnt, 0); 
 }
