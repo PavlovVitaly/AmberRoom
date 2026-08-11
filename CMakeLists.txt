@@ -21,19 +21,7 @@ if(AMBER_ROOM_MULTITHREADED)
 endif()
 
 # Find Boehm GC
-find_package(GC QUIET)
-if(NOT GC_FOUND)
-    find_package(PkgConfig QUIET)
-    if(PkgConfig_FOUND)
-        pkg_check_modules(GC IMPORTED_TARGET bdw-gc)
-        if(GC_FOUND)
-            add_library(GC::GC ALIAS PkgConfig::GC)
-        endif()
-    endif()
-endif()
-if(NOT GC_FOUND)
-    message(FATAL_ERROR "Boehm GC not found. Install libgc or provide it via Conan.")
-endif()
+find_package(BDWgc REQUIRED)
 
 # Find GTest
 find_package(GTest REQUIRED)
@@ -55,7 +43,7 @@ target_include_directories(amber_room_lib
         ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
-target_link_libraries(amber_room_lib PUBLIC GC::GC)
+target_link_libraries(amber_room_lib PUBLIC BDWgc::BDWgc)
 
 if(AMBER_ROOM_MULTITHREADED)
     target_link_libraries(amber_room_lib PUBLIC Threads::Threads)
@@ -91,14 +79,30 @@ gtest_discover_tests(utests)
 find_package(benchmark REQUIRED)
 find_package(immer REQUIRED)
 
-add_executable(bench_tests
-    benchmarks/immutable_ptr_bench.cpp
-)
+# =====================================================================
+# ISOLATED TARGETS FOR BENCHMARKS
+# =====================================================================
 
-target_link_libraries(bench_tests
-    PRIVATE
-        amber_room_lib
-        benchmark::benchmark
-        #benchmark::benchmark_main # creating main() for benchmarks
-        immer::immer 
-)
+# Single-threaded trivial benchmark (memory allocation)
+add_executable(bench_trivial benchmarks/immutable_ptr/immutable_ptr_trivial_bench.cpp)
+target_link_libraries(bench_trivial PRIVATE amber_room_lib benchmark::benchmark immer::immer)
+
+# Single-threaded benchmark with destructors
+add_executable(bench_destructor benchmarks/immutable_ptr/immutable_ptr_obj_with_destructor_bench.cpp)
+target_link_libraries(bench_destructor PRIVATE amber_room_lib benchmark::benchmark immer::immer)
+
+# Single-threaded benchmark with strings (SSO and heap-allocated)
+add_executable(bench_strings benchmarks/immutable_ptr/immutable_ptr_obj_with_string_bench.cpp)
+target_link_libraries(bench_strings PRIVATE amber_room_lib benchmark::benchmark immer::immer)
+
+# Multi-threaded trivial benchmark (Contention / TLAB performance)
+add_executable(bench_mt_trivial benchmarks/immutable_ptr/multithread_immutable_ptr_trivial_bench.cpp)
+target_link_libraries(bench_mt_trivial PRIVATE amber_room_lib benchmark::benchmark immer::immer)
+
+# Multi-threaded benchmark with destructors
+add_executable(bench_mt_destructor benchmarks/immutable_ptr/multithread_immutable_ptr_obj_with_destructor_bench.cpp)
+target_link_libraries(bench_mt_destructor PRIVATE amber_room_lib benchmark::benchmark immer::immer)
+
+# Multi-threaded benchmark with strings (Shared / Memory Contention)
+add_executable(bench_mt_strings benchmarks/immutable_ptr/multithread_immutable_ptr_obj_with_string_bench.cpp)
+target_link_libraries(bench_mt_strings PRIVATE amber_room_lib benchmark::benchmark immer::immer)
