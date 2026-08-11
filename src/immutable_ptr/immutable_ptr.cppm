@@ -40,7 +40,7 @@ static ImmutablePtr<T, Mode> createInstance(Args&&... args) {
     ScopedGCRedirection gcRedirection;
     
     void* mem = nullptr;
-    if(std::is_trivially_copyable_v<T> && !std::is_pointer_v<T>){
+    if constexpr (std::is_trivially_copyable_v<T> && !std::is_pointer_v<T>){
         mem = GC_MALLOC_ATOMIC(sizeof(T));
     } else {
         mem = GC_MALLOC(sizeof(T));

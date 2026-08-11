@@ -1,0 +1,9 @@
+// Debug
+conan install . --output-folder=build --build=missing -s build_type=Debug -c tools.cmake.cmaketoolchain:generator=Ninja
+cmake .. -G "Ninja" -DCMAKE_BUILD_TYPE=Debug 
+cmake --build . 
+
+// Release
+conan install . --output-folder=build --build=missing -s build_type=Release -c tools.cmake.cmaketoolchain:generator=Ninja
+cmake .. -G "Ninja" -DCMAKE_BUILD_TYPE=Release 
+cmake --build . 
