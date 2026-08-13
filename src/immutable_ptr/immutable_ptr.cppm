@@ -36,10 +36,18 @@ static ImmutablePtr<T, Mode> createInstance(Args&&... args) {
     ScopedGCRedirection gcRedirection;
     
     void* mem = nullptr;
-    if constexpr (PointerFree<T>){
-        mem = GC_MALLOC_ATOMIC(sizeof(T));
+    constexpr size_t alignment = alignof(T);
+    
+    // Check if the type requires over-alignment (e.g. SIMD alignas(32) or alignas(64))
+    if constexpr (alignment > sizeof(void*)) {
+        // Use Boehm GC aligned allocator to prevent hardware bus errors
+        mem = GC_memalign(alignment, sizeof(T));
     } else {
-        mem = GC_MALLOC(sizeof(T));
+        if constexpr (PointerFree<T>){
+            mem = GC_MALLOC_ATOMIC(sizeof(T));
+        } else {
+            mem = GC_MALLOC(sizeof(T));
+        }
     }
     
     if (!mem) throw std::bad_alloc();

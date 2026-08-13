@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 #include <gc/gc.h>
 #include <stdexcept>
+#include <cstdint>
 
 import immutable_ptr;
 
@@ -221,4 +222,29 @@ TEST(ImmutablePtrMutateSafetyTest, ExceptionSafetyDuringPlacementNew) {
     
     // Ensure the original player object remains untouched and perfectly valid
     EXPECT_EQ(player->hp, 100);
+}
+
+// Define a heavy over-aligned structure (simulating AVX-512 register state)
+struct alignas(64) AlignedVectorState {
+    double data[8];
+};
+
+// =====================================================================
+// OVER-ALIGNMENT SAFETY TEST
+// =====================================================================
+TEST(ImmutablePtrAlignmentTest, VerifiedOverAlignedAllocation) {
+    static bool gc_initialized = ([]() { GC_INIT(); return true; })();
+
+    // Step 1: Allocate our 64-byte aligned structure via our safe factory
+    auto vector = AmberRoom::make_flat_immutable_ptr<AlignedVectorState>();
+    ASSERT_TRUE(vector);
+
+    // Step 2: Get the raw address returned by the garbage collector
+    uintptr_t raw_address = reinterpret_cast<uintptr_t>(vector.get());
+
+    // Step 3: Verify that the memory address is perfectly divisible by 64.
+    // If our library used a basic GC_MALLOC, this check would fail on most systems,
+    // exposing a fatal undefined behavior vulnerability.
+    EXPECT_EQ(raw_address % 64, 0) << "Memory address " << raw_address 
+                                   << " is not properly aligned to 64 bytes!";
 }
