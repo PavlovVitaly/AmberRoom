@@ -12,15 +12,9 @@ module;
 export module immutable_ptr;
 
 import scoped_gc_redirection;
+import restrictions;
 
 namespace AmberRoom{
-
-template<typename T, typename... Args>
-concept InitializableFrom = requires(Args&&... args) {
-    ::new (std::declval<void*>()) T(std::forward<Args>(args)...);
-} || (sizeof...(Args) > 0 && requires(Args&&... args) {
-    ::new (std::declval<void*>()) T{std::forward<Args>(args)...};
-});
 
 template <typename F, typename U>
 concept Mutator = std::invocable<F, const U&> && 
@@ -33,6 +27,8 @@ export template<typename T, typename Mode = FlatMode>
 class ImmutablePtr{
 public:
 using mode_type = Mode;
+using has_embedded_pointers = std::true_type;
+
 
 template<typename... Args>
 requires InitializableFrom<T, Args...>
@@ -40,7 +36,7 @@ static ImmutablePtr<T, Mode> createInstance(Args&&... args) {
     ScopedGCRedirection gcRedirection;
     
     void* mem = nullptr;
-    if constexpr (std::is_trivially_copyable_v<T> && !std::is_pointer_v<T>){
+    if constexpr (PointerFree<T>){
         mem = GC_MALLOC_ATOMIC(sizeof(T));
     } else {
         mem = GC_MALLOC(sizeof(T));

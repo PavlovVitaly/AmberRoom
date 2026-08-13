@@ -2,6 +2,8 @@ cmake_minimum_required(VERSION 3.28)
 
 project(AmberRoom CXX)
 
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
 # enable c++ modules
 set(CMAKE_CXX_SCAN_FOR_MODULES ON)
 
@@ -22,9 +24,8 @@ endif()
 
 # Find Boehm GC
 find_package(BDWgc REQUIRED)
-
-# Find GTest
-find_package(GTest REQUIRED)
+# Find Boost PFR
+find_package(pfr REQUIRED)
 
 # target lib
 add_library(amber_room_lib)
@@ -36,6 +37,7 @@ target_sources(amber_room_lib
             src/memory/scoped_gc_redirection.cppm
             src/memory/gc_allocators.cppm
             src/std_aliases/std_aliases.cppm
+            src/restrictions/restrictions.cppm
 )
 
 target_include_directories(amber_room_lib
@@ -43,7 +45,10 @@ target_include_directories(amber_room_lib
         ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
-target_link_libraries(amber_room_lib PUBLIC BDWgc::BDWgc)
+target_link_libraries(amber_room_lib
+    PUBLIC
+        BDWgc::BDWgc
+        pfr::pfr)
 
 if(AMBER_ROOM_MULTITHREADED)
     target_link_libraries(amber_room_lib PUBLIC Threads::Threads)
@@ -55,6 +60,9 @@ endif()
 
 
 target_compile_features(amber_room_lib PRIVATE cxx_std_23)
+
+# Find GTest
+find_package(GTest REQUIRED)
 
 # target tests
 add_executable(utests

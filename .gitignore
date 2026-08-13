@@ -68,3 +68,7 @@ vcpkg_installed/
 Testing/
 .cache/
 .vscode/
+
+# clang dirs and files
+.clangd/
+.clangd
