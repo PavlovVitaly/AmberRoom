@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 #include <gc/gc.h>
+#include <stdexcept>
 
 import immutable_ptr;
 
@@ -168,4 +169,56 @@ TEST(ImmutablePtrTest, MutateTest) {
     EXPECT_EQ(player2->name, "Paladin");
 
     EXPECT_EQ(TestPlayer::copy_cnt, 0); 
+}
+
+// Helper structure that throws an exception during copy/move construction
+struct ExplosivePlayer {
+    int hp;
+    bool should_explode = false;
+
+    ExplosivePlayer(int h, bool explode) : hp(h), should_explode(explode) {}
+    
+    // Copy constructor that simulates an exception during mutation
+    ExplosivePlayer(const ExplosivePlayer& other) : hp(other.hp), should_explode(other.should_explode) {
+        if (should_explode) {
+            throw std::runtime_error("Simulated crash inside object constructor during mutation!");
+        }
+    }
+};
+
+// =====================================================================
+// MUTATE NULLPTR PROTECTION TEST
+// =====================================================================
+TEST(ImmutablePtrMutateSafetyTest, ThrowsOnNullptrMutation) {
+    // Create an empty default-initialized ImmutablePtr
+    ImmutablePtr<int> null_ptr;
+    
+    // Verify that calling mutate triggers a controlled std::runtime_error instead of SIGSEGV
+    EXPECT_THROW({
+        null_ptr.mutate([](const int& current) {
+            return current + 10;
+        });
+    }, std::runtime_error);
+}
+
+// =====================================================================
+// MUTATE EXCEPTION SAFETY TEST
+// =====================================================================
+TEST(ImmutablePtrMutateSafetyTest, ExceptionSafetyDuringPlacementNew) {
+    // Create a valid pointer with an object configured to explode on copy/mutation
+    auto player = make_flat_immutable_ptr<ExplosivePlayer>(100, true);
+    ASSERT_TRUE(player);
+
+    // Verify that if the mutator/constructor throws, the exception is safely propagated,
+    // and the system RAII cleanup routines don't cause double-free or memory corruption
+    EXPECT_THROW({
+        auto corrupted_player = player.mutate([](const ExplosivePlayer& current) {
+            ExplosivePlayer next{current}; // Triggers the explosive copy constructor
+            next.hp -= 20;
+            return next;
+        });
+    }, std::runtime_error);
+    
+    // Ensure the original player object remains untouched and perfectly valid
+    EXPECT_EQ(player->hp, 100);
 }

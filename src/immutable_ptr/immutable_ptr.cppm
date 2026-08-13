@@ -129,6 +129,9 @@ const T* get() const noexcept{
 template<typename F>
 requires Mutator<F, T>
 auto mutate(F mutator) const{
+    if (!ptr_) {
+        throw std::runtime_error("Attempted to mutate a null AmberRoom::ImmutablePtr");
+    }
     return createInstance(mutator(*ptr_));
 }
 
