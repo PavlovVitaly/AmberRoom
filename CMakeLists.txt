@@ -67,6 +67,7 @@ find_package(GTest REQUIRED)
 # target tests
 add_executable(utests
     tests/immutable_ptr_tests.cpp
+    src/memory/scoped_gc_redirection.cpp
 )
 
 target_link_libraries(utests
@@ -92,25 +93,37 @@ find_package(immer REQUIRED)
 # =====================================================================
 
 # Single-threaded trivial benchmark (memory allocation)
-add_executable(bench_trivial benchmarks/immutable_ptr/immutable_ptr_trivial_bench.cpp)
+add_executable(bench_trivial
+    benchmarks/immutable_ptr/immutable_ptr_trivial_bench.cpp
+    src/memory/scoped_gc_redirection.cpp)
 target_link_libraries(bench_trivial PRIVATE amber_room_lib benchmark::benchmark immer::immer)
 
 # Single-threaded benchmark with destructors
-add_executable(bench_destructor benchmarks/immutable_ptr/immutable_ptr_obj_with_destructor_bench.cpp)
+add_executable(bench_destructor
+    benchmarks/immutable_ptr/immutable_ptr_obj_with_destructor_bench.cpp
+    src/memory/scoped_gc_redirection.cpp)
 target_link_libraries(bench_destructor PRIVATE amber_room_lib benchmark::benchmark immer::immer)
 
 # Single-threaded benchmark with strings (SSO and heap-allocated)
-add_executable(bench_strings benchmarks/immutable_ptr/immutable_ptr_obj_with_string_bench.cpp)
+add_executable(bench_strings
+    benchmarks/immutable_ptr/immutable_ptr_obj_with_string_bench.cpp
+    src/memory/scoped_gc_redirection.cpp)
 target_link_libraries(bench_strings PRIVATE amber_room_lib benchmark::benchmark immer::immer)
 
 # Multi-threaded trivial benchmark (Contention / TLAB performance)
-add_executable(bench_mt_trivial benchmarks/immutable_ptr/multithread_immutable_ptr_trivial_bench.cpp)
+add_executable(bench_mt_trivial
+    benchmarks/immutable_ptr/multithread_immutable_ptr_trivial_bench.cpp
+    src/memory/scoped_gc_redirection.cpp)
 target_link_libraries(bench_mt_trivial PRIVATE amber_room_lib benchmark::benchmark immer::immer)
 
 # Multi-threaded benchmark with destructors
-add_executable(bench_mt_destructor benchmarks/immutable_ptr/multithread_immutable_ptr_obj_with_destructor_bench.cpp)
+add_executable(bench_mt_destructor
+    benchmarks/immutable_ptr/multithread_immutable_ptr_obj_with_destructor_bench.cpp
+    src/memory/scoped_gc_redirection.cpp)
 target_link_libraries(bench_mt_destructor PRIVATE amber_room_lib benchmark::benchmark immer::immer)
 
 # Multi-threaded benchmark with strings (Shared / Memory Contention)
-add_executable(bench_mt_strings benchmarks/immutable_ptr/multithread_immutable_ptr_obj_with_string_bench.cpp)
+add_executable(bench_mt_strings
+    benchmarks/immutable_ptr/multithread_immutable_ptr_obj_with_string_bench.cpp
+    src/memory/scoped_gc_redirection.cpp)
 target_link_libraries(bench_mt_strings PRIVATE amber_room_lib benchmark::benchmark immer::immer)

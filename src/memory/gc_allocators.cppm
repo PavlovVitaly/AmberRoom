@@ -13,7 +13,6 @@ export enum class GcScanKind {
     Atomic
 };
 
-// Универсальный аллокатор для связи STL и Boehm GC
 export template <typename T, GcScanKind ScanKind>
 class GcAllocator {
 public:
@@ -24,6 +23,8 @@ public:
     GcAllocator(const GcAllocator<U, SK>&) noexcept {}
 
     [[nodiscard]] T* allocate(std::size_t n) {
+        if (n == 0) return nullptr;
+
         if (n > std::numeric_limits<std::size_t>::max() / sizeof(T)) {
             throw std::bad_alloc();
         }
@@ -40,6 +41,7 @@ public:
     }
 
     void deallocate(T* ptr, std::size_t) noexcept {
+        if (ptr == nullptr) return;
         GC_free(ptr);
     }
 

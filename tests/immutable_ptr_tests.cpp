@@ -2,12 +2,17 @@
 #include <gc/gc.h>
 #include <stdexcept>
 #include <cstdint>
+#include <string>
+#include <new>
+
 
 import immutable_ptr;
+import scoped_gc_redirection;
 
 using AmberRoom::ImmutablePtr;
 using AmberRoom::make_flat_immutable_ptr;
 using AmberRoom::clone_immutable_ptr;
+using AmberRoom::ScopedGCRedirection;
 
 class MockStruct{
     int field_{100};
@@ -236,7 +241,7 @@ TEST(ImmutablePtrAlignmentTest, VerifiedOverAlignedAllocation) {
     static bool gc_initialized = ([]() { GC_INIT(); return true; })();
 
     // Step 1: Allocate our 64-byte aligned structure via our safe factory
-    auto vector = AmberRoom::make_flat_immutable_ptr<AlignedVectorState>();
+    auto vector = make_flat_immutable_ptr<AlignedVectorState>();
     ASSERT_TRUE(vector);
 
     // Step 2: Get the raw address returned by the garbage collector
@@ -247,4 +252,62 @@ TEST(ImmutablePtrAlignmentTest, VerifiedOverAlignedAllocation) {
     // exposing a fatal undefined behavior vulnerability.
     EXPECT_EQ(raw_address % 64, 0) << "Memory address " << raw_address 
                                    << " is not properly aligned to 64 bytes!";
+}
+
+// Helper over-aligned structure to trigger std::align_val_t overloads
+struct alignas(64) HeavyGlobalState {
+    uint64_t payload[8];
+};
+
+// =====================================================================
+// GLOBAL NEW/DELETE REDIRECTION TESTS
+// =====================================================================
+
+TEST(GCRedirectionTest, VerifiedStdStringHeapInterception) {
+    static bool gc_initialized = ([]() { GC_INIT(); return true; })();
+
+    std::string* managed_string = nullptr;
+
+    // Step 1: Trigger the redirection scope
+    {
+        ScopedGCRedirection redirection;
+        
+        // This invokes our overridden global operator new.
+        // It must allocate a long string (> 15 chars) to force heap allocation and bypass SSO.
+        managed_string = new std::string("This is a very long string that will definitely trigger heap allocation inside std::string");
+    }
+
+    ASSERT_NE(managed_string, nullptr);
+
+    // Step 2: Verify that the string container itself belongs to the GC heap
+    EXPECT_NE(GC_base(managed_string), nullptr) << "The string container bypassed ScopedGCRedirection!";
+
+    // Step 3: Explicitly call global delete. 
+    // Our updated deallocate_memory must use GC_base, detect it's a GC pointer,
+    // invoke the destructor safely, and skip std::free to prevent heap corruption.
+    delete managed_string;
+}
+
+TEST(GCRedirectionTest, VerifiedOverAlignedGlobalNewDelete) {
+    static bool gc_initialized = ([]() { GC_INIT(); return true; })();
+
+    HeavyGlobalState* aligned_obj = nullptr;
+
+    // Step 1: Allocate over-aligned structure inside redirection scope
+    {
+        ScopedGCRedirection redirection;
+        
+        // This forces the compiler to choose operator new(size, std::align_val_t)
+        aligned_obj = new HeavyGlobalState();
+    }
+
+    ASSERT_NE(aligned_obj, nullptr);
+
+    // Step 2: Verify both the GC allocation and the 64-byte hardware alignment
+    uintptr_t address = reinterpret_cast<uintptr_t>(aligned_obj);
+    EXPECT_NE(GC_base(aligned_obj), nullptr) << "Aligned object bypassed GC memory!";
+    EXPECT_EQ(address % 64, 0) << "Global aligned new failed to align address to 64 bytes!";
+
+    // Step 3: Safe delete verification via GC_base
+    delete aligned_obj;
 }
